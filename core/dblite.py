@@ -14,13 +14,12 @@ logger = logging.getLogger(__name__)
 def gW(arr: Union[List, Tuple, Set]):
     arr = tuple(sorted(arr))
     if len(arr) == 0:
-        raise ValueError(f"El campo arr no puede estar vacío")
+        raise ValueError("El campo arr no puede estar vacío")
     if len(arr) > 1:
         return f" in {arr}"
     if isinstance(arr[0], str):
         return f" = '{arr[0]}'"
     return f"={arr[0]}"
-
 
 
 def mkAgregator(fnc: Callable):
@@ -62,6 +61,7 @@ class DBLiteException(sqlite3.OperationalError):
 
 class EmptyUpSertException(DBLiteException):
     pass
+
 
 class SqlException(DBLiteException):
     pass
@@ -107,7 +107,16 @@ class DBLite:
         self.__trim_str = trim_str
         self.__empty_is_null = empty_is_null
         self.__commit_every_x_changes = commit_every_x_changes
-        self.__con: sqlite3.Connection = self.__get__connection()
+        self._con: sqlite3.Connection = None
+        self._con = self.__get__connection()
+
+    @property
+    def file(self):
+        if self._con is not None:
+            for name, file in self.select("PRAGMA database_list"):
+                if name == "main":
+                    return file
+        return self.__file
 
     def __get__connection(self):
         if self.__readonly:
@@ -123,16 +132,18 @@ class DBLite:
                 )
 
         logger.info("sqlite: " + self.__file)
-        if self.__readonly:
-            file = "file:" + self.__file + "?mode=ro"
-            con = sqlite3.connect(file, uri=True)
-        else:
-            con = sqlite3.connect(self.__file)
+        con = self._connect()
         if self.__extensions:
             con.enable_load_extension(True)
             for e in self.__extensions:
                 con.load_extension(e)
         return con
+
+    def _connect(self):
+        if self.__readonly:
+            file = "file:" + self.__file + "?mode=ro"
+            return sqlite3.connect(file, uri=True)
+        return sqlite3.connect(self.__file)
 
     def __enter__(self, *args, **kwargs):
         return self
@@ -142,21 +153,29 @@ class DBLite:
 
     def openTransaction(self):
         if self.__inTransaction:
-            self.__con.execute("END TRANSACTION")
-        self.__con.execute("BEGIN TRANSACTION")
+            self._con.execute("END TRANSACTION")
+        self._con.execute("BEGIN TRANSACTION")
         self.__inTransaction = True
 
     def closeTransaction(self):
         if self.__inTransaction:
-            self.__con.execute("END TRANSACTION")
+            self._con.execute("END TRANSACTION")
             self.__inTransaction = False
 
     def execute(self, sql: str):
         try:
-            self.__con.executescript(sql)
+            self._con.execute(sql)
         except sqlite3.OperationalError as e:
             raise SqlException(sql) from e
-        self.__con.commit()
+        self._con.commit()
+        self.clear_cache()
+
+    def executescript(self, sql: str):
+        try:
+            self._con.executescript(sql)
+        except sqlite3.OperationalError as e:
+            raise SqlException(sql) from e
+        self._con.commit()
         self.clear_cache()
 
     def clear_cache(self):
@@ -182,7 +201,7 @@ class DBLite:
             sql = f"select * from {sql} limit 0"
         elif _sql[-1] != "limit":
             sql = sql + " limit 0"
-        cursor = self.__con.cursor()
+        cursor = self._con.cursor()
         cursor.execute(sql)
         cols = tuple(col[0] for col in cursor.description)
         cursor.close()
@@ -203,7 +222,7 @@ class DBLite:
 
         prm = ['?'] * len(vals)
         sql = f"INSERT{insert_or} INTO {table} {tuple(keys)} VALUES {tuple(prm)}"
-        self.__upsert(sql, vals)
+        self.upsert(sql, vals)
 
     def update(self, table: str, where: Union[None, Dict[str, Any]], **kwargs):
         data = self.__sanitize_row(table, kwargs, skip_null=False)
@@ -228,11 +247,11 @@ class DBLite:
         if whre:
             sql = sql + f" where {' and '.join(whre)}"
 
-        self.__upsert(sql, vals)
+        self.upsert(sql, vals)
 
-    def __upsert(self, sql: str, vals: List):
+    def upsert(self, sql: str, vals: List):
         try:
-            self.__con.execute(sql, vals)
+            self._con.execute(sql, vals)
             self.__change_occurred()
         except sqlite3.OperationalError as e:
             sql = DBLite.__format_sql(sql, vals)
@@ -244,7 +263,7 @@ class DBLite:
             return False
         if self.__changes % self.__commit_every_x_changes != 0:
             return False
-        self.__con.commit()
+        self._con.commit()
         return True
 
     def __sanitize_row(self, table: str, kwargs: Dict[str, Any], skip_null=False):
@@ -271,14 +290,14 @@ class DBLite:
         return data
 
     def commit(self):
-        self.__con.commit()
+        self._con.commit()
 
     def close(self, vacuum=True):
         if self.__readonly:
-            self.__con.close()
+            self._con.close()
             return
         self.closeTransaction()
-        self.__con.commit()
+        self._con.commit()
         if vacuum:
             ic = self.get_integrity_check() or "¿?"
             logger.info(f"integrity_check = {ic}")
@@ -286,9 +305,9 @@ class DBLite:
             logger.info("foreign_key_check = " + ("ko" if fkc else "ok"))
             for table, parent in fkc:
                 logger.info(f"  {table} -> {parent}")
-            self.__con.execute("VACUUM")
-        self.__con.commit()
-        self.__con.close()
+            self._con.execute("VACUUM")
+        self._con.commit()
+        self._con.close()
 
     def get_integrity_check(self):
         return self.one("pragma integrity_check")
@@ -302,8 +321,8 @@ class DBLite:
         return tuple(data)
 
     def select(self, sql: str, *args, row_factory=None, **kwargs):
-        self.__con.row_factory = row_factory
-        cursor = self.__con.cursor()
+        self._con.row_factory = row_factory
+        cursor = self._con.cursor()
         if len(args):
             cursor.execute(sql, args)
         else:
@@ -311,7 +330,7 @@ class DBLite:
         for r in ResultIter(cursor):
             yield r
         cursor.close()
-        self.__con.row_factory = None
+        self._con.row_factory = None
 
     def to_tuple(self, *args, **kwargs):
         arr = []
@@ -333,15 +352,15 @@ class DBLite:
         return dct
 
     def one(self, sql: str, *args, row_factory=None):
-        self.__con.row_factory = row_factory
-        cursor = self.__con.cursor()
+        self._con.row_factory = row_factory
+        cursor = self._con.cursor()
         if len(args):
             cursor.execute(sql, args)
         else:
             cursor.execute(sql)
         r = cursor.fetchone()
         cursor.close()
-        self.__con.row_factory = None
+        self._con.row_factory = None
         if not r:
             return None
         if isinstance(r, tuple) and len(r) == 1:
@@ -352,7 +371,7 @@ class DBLite:
         re_insert = re.compile(r'^INSERT\s+INTO\s+(.+)\s+VALUES\s*\((.*)\);$')
         yield 'PRAGMA foreign_keys=OFF;'
         yield 'BEGIN TRANSACTION;'
-        for lines in self.__con.iterdump():
+        for lines in self._con.iterdump():
             for line in lines.split("\n"):
                 ln = line.strip().upper()
                 if ln in ("", "COMMIT;", "BEGIN TRANSACTION;"):
@@ -368,7 +387,7 @@ class DBLite:
         def val_to_str(vls: List[str], end: str):
             return ",".join(vls)+end
 
-        for line in self.__con.iterdump():
+        for line in self._con.iterdump():
             m = re_insert.match(line)
             if m is None:
                 continue
@@ -398,23 +417,28 @@ class DBLite:
         yield 'pragma integrity_check;'
         yield 'pragma foreign_key_check;'
 
-    def relocate(self, file: str):
-        self.closeTransaction()
-        self.__con.commit()
+    def sql_backup(self, *args, **kwargs):
+        nam_file = self.file.rsplit(".", 1)[0]
+        with open(nam_file+".sql", "w") as f:
+            for line in self.iter_sql_backup(*args, **kwargs):
+                f.write(line+"\n")
 
-        self.__file = file
-        if file == MEMORY:
-            self.__readonly = True
-        con = self.__get__connection()
-        self.__con.backup(con)
-        self.__con.close()
-        self.__con = con
+    def backup(self, target: Union[sqlite3.Connection, "DBLite", str]):
+        if isinstance(target, DBLite):
+            target = target._con
+        if isinstance(target, sqlite3.Connection):
+            self._con.backup(target)
+            return
+        if isinstance(target, str) and target != MEMORY:
+            with DBLite(target) as con:
+                self._con.backup(con._con)
+        raise ValueError(target)
 
     def register_function(self, name: str, num_params: int, func: Callable, is_aggregate=False):
         if is_aggregate:
-            self.__con.create_aggregate(name, num_params, mkAgregator(func))
+            self._con.create_aggregate(name, num_params, mkAgregator(func))
         else:
-            self.__con.create_function(name, num_params, func)
+            self._con.create_function(name, num_params, func)
 
 
 class LazzyDBLite:
@@ -428,7 +452,7 @@ class LazzyDBLite:
         if self.__db is None:
             self.__db = DBLite(*self.__args, **self.__kwargs)
         return self.__db
-    
+
     def close(self):
         if self.__db is not None:
             self.__db.close()
