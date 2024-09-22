@@ -26,12 +26,12 @@ class InfoDBLite(DBLite):
         )
         if r['vals'] > 0:
             if r['type'] == 'real':
-                if self.one('select count(*) from "{table}" where "{col}" is not null and "{col}"!=round("{col}")') == 0:
+                if self.one(f'select count(*) from "{table}" where "{col}" is not null and "{col}"!=round("{col}")') == 0:
                     r['type'] = 'int!'
             elif r['type'] == 'integer':
                 r['type'] = 'int'
             elif r['type'] == 'text':
-                if self.one('select count(*) from "{table}" where not("{col}" is null or "{col}"=\'\') and not isdigit("{col}")') == 0:
+                if self.one(f'select count(*) from "{table}" where not("{col}" is null or "{col}"=\'\') and not isdigit("{col}")') == 0:
                     r['type'] = 'int?'
         for k, v in list(r.items()):
             if isinstance(v, float):
@@ -59,7 +59,8 @@ if __name__ == "__main__":
     for file in pargs.sqlite:
         print("#", basename(file))
         with InfoDBLite(file) as db:
-            for table, cols in sorted(db.tables.items()):
+            for table in sorted(db.tables):
+                cols = db.get_cols(table)
                 print("\n##", table, "({} filas)".format(db.one(f'select count(*) from "{table}"')), end="\n\n")
                 print(line_fmt.format(col="Columna", type="Tipo", min="MIN", max="MAX", vals="Vals", nulls="Nulos"))
                 print(
