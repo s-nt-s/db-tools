@@ -14,6 +14,7 @@ from core.source import Source
 HOME = os.environ.get('HOME')
 MDB = ("mdb", "accdb")
 XLS = ("xls", "xlsx")
+SQL = ("sql", "sqlite")
 
 
 def rel_home(path: str):
@@ -62,27 +63,27 @@ class SourceLite(MEMLite):
 
 
 if __name__ == "__main__":
-    EXT = MDB + XLS
+    EXT = MDB + XLS + SQL
     parser = argparse.ArgumentParser(
-        "Convierte una base de datos Access ({}) a SQLite".format("|".join(EXT)),
+        "Convierte {} a SQLite".format(", ".join(EXT)),
         formatter_class=argparse.RawTextHelpFormatter
     )
+    parser.add_argument('--verbose', '-v', action='count', help="Nivel de depuración", default=0)
     parser.add_argument('--sql', action='store_true', help="Guardar script sql")
     parser.add_argument('--normalize', action='store_true', help='Renombrar tablas y columnas para normalizarlas')
     parser.add_argument('--out', help="Fichero de salida")
-    parser.add_argument('--verbose', '-v', action='count', help="Nivel de depuración", default=0)
 
     parser.add_argument('files', nargs='+',
         help=dedent(
         '''
-            Base de datos Access o excel ({}), o
+            Fichero fuente ({}), o
             precedido por !, tablas a excluir, o
             precedido por !!, excluir todo menos las tabla indicada
             acabando en _, un prefijo para las tablas
             empezando por  _, un sufijo para las tablas
 
-            El operador + y ! se aplica a la base de datos más proxima.
-            No se puede usar ambos operadores (! y +) en una misma base de datos
+            El operador ! y !! se aplica a la base de datos más proxima.
+            No se puede usar ambos operadores (! y !!) en una misma base de datos
         '''
         ).format("|".join(EXT)).strip()
     )
@@ -100,7 +101,7 @@ if __name__ == "__main__":
     def parse_file(f: str):
         def __validate(s: str):
             if len(s) == 0:
-                sys.exit(f"no se puede usar un modificador ({f}) sin un nombre")
+                sys.exit(f"No se puede usar un modificador ({f}) sin un nombre")
             return s
 
         if isfile(f):
@@ -125,11 +126,11 @@ if __name__ == "__main__":
         if flag is True:
             ext = file.split(".")[-1].lower()
             if ext not in EXT:
-                sys.exit(file + " no termina en .mdb o .accdb")
+                sys.exit(file + " tiene una extension no valida ({})".format(", ".join(EXT)))
             files[file] = Source(file=file)
             continue
         if len(files) == 0:
-            sys.exit(f"no se puede usar un modificador ({file}) antes incluir una base de datos")
+            sys.exit(f"No se puede usar un modificador ({file}) antes incluir una fuente de datos")
         lastk = list(files.keys())[-1]
         lastv = files[lastk]
         if flag == "!":

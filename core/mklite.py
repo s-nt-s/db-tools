@@ -42,33 +42,32 @@ class MEMLite(DBLite):
         super().__init__(*args, **kwargs)
         self.register_function("can_be_int", 1, can_be_int)
 
-    def _connect(self):
-        ext = self.__get_ext()
-        cnt = getattr(self, "_connect_" + ext, None)
-        if cnt is None:
-            src = super()._connect()
-            if self.__file == MEMORY:
-                return src
-            con = sqlite3.connect(MEMORY)
-            src.backup(con)
-            return con
-        return cnt()
+    def _connect(self, file: str):
+        ext = self.__get_ext(file)
+        cnt = getattr(self, "_connect_" + ext, super()._connect)
+        src = cnt(file)
+        if file == MEMORY:
+            return src
+        con = sqlite3.connect(MEMORY)
+        src.backup(con)
+        src.close()
+        return con
 
-    def __get_ext(self) -> str:
-        ext = self.file.rsplit(".", 1)[-1]
+    def __get_ext(self, file: str) -> str:
+        ext = file.rsplit(".", 1)[-1]
         ext = ext.lower()
         return {
             "accdb": "mdb",
             "xlsx": "xls",
         }.get(ext, ext)
 
-    def _connect_mdb(self):
+    def _connect_mdb(self, file: str):
         def __get_schema():
-            schema = Shell.get("mdb-schema", self.file, "sqlite")
+            schema = Shell.get("mdb-schema", file, "sqlite")
             for line in schema.split("\n"):
                 line = line.strip()
                 if line.startswith("ALTER TABLE ") and "ADD CONSTRAINT" in line:
-                    return Shell.get("mdb-schema", "--no-relations", self.file, "sqlite")
+                    return Shell.get("mdb-schema", "--no-relations", file, "sqlite")
             return schema
 
         con = sqlite3.connect(MEMORY)
@@ -78,31 +77,30 @@ class MEMLite(DBLite):
         con.executescript(schema)
         con.commit()
 
-        sql_script = []
-        for table in Shell.get("mdb-tables", "-1", self.file):
-            output = Shell.get("mdb-export", "-I", "sqlite", "-D", "%Y-%m-%d %H:%M", self.src.file, table)
-            if len(output.strip()) > 0:
-                sql_script.append(output)
-        con.executescript("\n".join(sql_script))
-        con.commit()
+        for table in Shell.get("mdb-tables", "-1", file):
+            output = Shell.get("mdb-export", "-I", "sqlite", "-D", "%Y-%m-%d %H:%M", file, table)
+            output = output.strip()
+            if len(output) > 0:
+                con.executescript(output)
+                con.commit()
 
         return con
 
-    def _connect_xls(self):
+    def _connect_xls(self, file: str):
         def __normalize_col(c: str):
             return normalize_name(c, prefix='c')
 
         def __read_data():
             skiprows = 0
             while True:
-                data = pd.read_excel(self.file, skiprows=skiprows)
+                data = pd.read_excel(file, skiprows=skiprows)
                 for c in data.columns:
                     if not re.match(r"^Unnamed: \d+$", c):
                         data.columns = tuple(map(__normalize_col, data.columns))
                         return data
                 skiprows = skiprows + 1
 
-        name = basename(self.file).rsplit(".", 1)[0]
+        name = basename(file).rsplit(".", 1)[0]
         name = normalize_name(name, prefix="t")
         data = __read_data()
 
@@ -110,6 +108,12 @@ class MEMLite(DBLite):
 
         data.to_sql(name=name, index=False, con=con)
 
+        return con
+
+    def _connect_sql(self, file: str):
+        con = sqlite3.connect(MEMORY)
+        with open(file, "r") as f:
+            con.executescript(f.read())
         return con
 
     def count(self, table: str, where: str = None):
