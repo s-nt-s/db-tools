@@ -52,7 +52,7 @@ class Shell:
         logger.info("$ " + Shell.to_str(*args))
         out = subprocess.call(args, **kwargs)
         if out != 0:
-            logger.error("# exit code", out)
+            logger.error("# exit code %s", out)
         return out
 
     @staticmethod
