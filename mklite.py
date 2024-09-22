@@ -6,7 +6,8 @@ import sys
 import argparse
 from typing import Dict
 from textwrap import dedent
-from core.mklite import MEMLite
+from core.mklite import MEMLite, NormLite
+from typing import NamedTuple, Tuple, List
 
 import logging
 from core.source import Source
@@ -23,6 +24,12 @@ def rel_home(path: str):
     if path.startswith(HOME + "/"):
         return "~" + path[len(HOME):]
     return path
+
+
+class Resume(NamedTuple):
+    file: str
+    selected: Tuple[str]
+    exclude: Tuple[str]
 
 
 class SourceLite(MEMLite):
@@ -42,7 +49,7 @@ class SourceLite(MEMLite):
             self.execute(f'DROP TABLE IF EXISTS "{t}";')
         self.commit()
 
-        self.selected_tables = list(self.tables)
+        self.selected_tables = tuple(self.tables)
 
         if len(self.src.rename) > 0:
             for old, new in zip(self.tables, self.src.rename):
@@ -52,14 +59,13 @@ class SourceLite(MEMLite):
             for t in self.tables:
                 self.execute(f'ALTER TABLE "{t}" RENAME TO "{self.src.prefix}{t}{self.src.sufix}";')
 
-    def print_resume(self):
-        print("*", rel_home(self.src.name))
-        for t in sorted(self.selected_tables+self.exclude):
-            s = t.replace("~", "\\~")
-            if t in self.exclude:
-                print(f"    * ~~{s}~~")
-            else:
-                print(f"    * {s}")
+    def get_resumen(self):
+        return Resume(
+            file=rel_home(self.src.name),
+            exclude=self.exclude,
+            selected=self.selected_tables
+        )
+
 
 
 if __name__ == "__main__":
@@ -153,17 +159,26 @@ if __name__ == "__main__":
     if isfile(pargs.out):
         sys.exit(pargs.out + " ya existe")
 
-    with SourceLite(pargs.out) as db:
+    resume: List[Resume] = []
+    with NormLite(pargs.out) as db:
         with SourceLite(sources[0]) as s:
             s.backup(db)
-            s.print_resume()
+            resume.append(s.get_resumen())
         for src in sources[1:]:
             with SourceLite(src) as s:
                 db.executescript("\n".join(s.iter_sql_backup()))
-                s.print_resume()
+                resume.append(s.get_resumen())
         if pargs.normalize:
             db.normalize()
         if pargs.sql:
             with open(pargs.out+".sql", "w") as f:
                 for ln in db.iter_sql_backup():
                     f.write(ln+"\n")
+    for r in resume:
+        print("*", r.file)
+        for t in sorted(r.selected+r.exclude):
+            s = t.replace("~", "\\~")
+            if t in r.exclude:
+                print(f"    * ~~{s}~~")
+            else:
+                print(f"    * {s}")

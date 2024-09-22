@@ -219,7 +219,7 @@ class DBLite:
 
         prm = ['?'] * len(vals)
         sql = f"INSERT{insert_or} INTO {table} {tuple(keys)} VALUES {tuple(prm)}"
-        self.upsert(sql, vals)
+        self.run_modify_query(sql, *vals)
 
     def update(self, table: str, where: Union[None, Dict[str, Any]], **kwargs):
         data = self.__sanitize_row(table, kwargs, skip_null=False)
@@ -244,9 +244,9 @@ class DBLite:
         if whre:
             sql = sql + f" where {' and '.join(whre)}"
 
-        self.upsert(sql, vals)
+        self.run_modify_query(sql, *vals)
 
-    def upsert(self, sql: str, vals: List):
+    def run_modify_query(self, sql: str, *vals):
         try:
             self._con.execute(sql, vals)
             self.__change_occurred()

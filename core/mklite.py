@@ -37,84 +37,10 @@ def can_be_int(s):
     return False
 
 
-class MEMLite(DBLite):
+class NormLite(DBLite):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.register_function("can_be_int", 1, can_be_int)
-
-    def _connect(self, file: str):
-        ext = self.__get_ext(file)
-        cnt = getattr(self, "_connect_" + ext, super()._connect)
-        src = cnt(file)
-        if file == MEMORY:
-            return src
-        con = sqlite3.connect(MEMORY)
-        src.backup(con)
-        src.close()
-        return con
-
-    def __get_ext(self, file: str) -> str:
-        ext = file.rsplit(".", 1)[-1]
-        ext = ext.lower()
-        return {
-            "accdb": "mdb",
-            "xlsx": "xls",
-        }.get(ext, ext)
-
-    def _connect_mdb(self, file: str):
-        def __get_schema():
-            schema = Shell.get("mdb-schema", file, "sqlite")
-            for line in schema.split("\n"):
-                line = line.strip()
-                if line.startswith("ALTER TABLE ") and "ADD CONSTRAINT" in line:
-                    return Shell.get("mdb-schema", "--no-relations", file, "sqlite")
-            return schema
-
-        con = sqlite3.connect(MEMORY)
-
-        schema = __get_schema()
-        schema = re.sub(r"\bvarchar($|,)", r"TEXT\1", schema, flags=re.MULTILINE)
-        con.executescript(schema)
-        con.commit()
-
-        for table in Shell.get("mdb-tables", "-1", file):
-            output = Shell.get("mdb-export", "-I", "sqlite", "-D", "%Y-%m-%d %H:%M", file, table)
-            output = output.strip()
-            if len(output) > 0:
-                con.executescript(output)
-                con.commit()
-
-        return con
-
-    def _connect_xls(self, file: str):
-        def __normalize_col(c: str):
-            return normalize_name(c, prefix='c')
-
-        def __read_data():
-            skiprows = 0
-            while True:
-                data = pd.read_excel(file, skiprows=skiprows)
-                for c in data.columns:
-                    if not re.match(r"^Unnamed: \d+$", c):
-                        data.columns = tuple(map(__normalize_col, data.columns))
-                        return data
-                skiprows = skiprows + 1
-
-        name = basename(file).rsplit(".", 1)[0]
-        name = normalize_name(name, prefix="t")
-        data = __read_data()
-
-        con = sqlite3.connect(MEMORY)
-
-        data.to_sql(name=name, index=False, con=con)
-
-        return con
-
-    def _connect_sql(self, file: str):
-        con = sqlite3.connect(MEMORY)
-        with open(file, "r") as f:
-            con.executescript(f.read())
-        return con
 
     def count(self, table: str, where: str = None):
         sql = f'select count(*) from "{table}"'
@@ -127,8 +53,8 @@ class MEMLite(DBLite):
 
     def get_new_type(self, current_type, table, column):
         if current_type == "TEXT":
-            self.upsert(f'UPDATE "{table}" SET "{column}" = TRIM("{column}") where "{column}" is not null;')
-            self.upsert(f'UPDATE "{table}" SET "{column}" = NULL where "{column}" = \'\';')
+            self.run_modify_query(f'UPDATE "{table}" SET "{column}" = TRIM("{column}") where "{column}" is not null;')
+            self.run_modify_query(f'UPDATE "{table}" SET "{column}" = NULL where "{column}" = \'\';')
         if 0 == self.count(table, where=f'"{column}" is not null'):
             return current_type
         if current_type in ('REAL', 'TEXT') and self.notExists(table, where=f'not can_be_int("{column}")'):
@@ -197,3 +123,81 @@ class MEMLite(DBLite):
         self.execute(f"ALTER TABLE {tmp_new_table_name} RENAME TO {new_table_name};")
 
         return True
+
+
+class MEMLite(DBLite):
+
+    def _connect(self, file: str):
+        ext = self.__get_ext(file)
+        cnt = getattr(self, "_connect_" + ext, super()._connect)
+        src = cnt(file)
+        if file == MEMORY:
+            return src
+        con = sqlite3.connect(MEMORY)
+        src.backup(con)
+        src.close()
+        return con
+
+    def __get_ext(self, file: str) -> str:
+        ext = file.rsplit(".", 1)[-1]
+        ext = ext.lower()
+        return {
+            "accdb": "mdb",
+            "xlsx": "xls",
+        }.get(ext, ext)
+
+    def _connect_mdb(self, file: str):
+        def __get_schema():
+            schema = Shell.get("mdb-schema", file, "sqlite")
+            for line in schema.split("\n"):
+                line = line.strip()
+                if line.startswith("ALTER TABLE ") and "ADD CONSTRAINT" in line:
+                    return Shell.get("mdb-schema", "--no-relations", file, "sqlite")
+            return schema
+
+        con = sqlite3.connect(MEMORY)
+
+        schema = __get_schema()
+        schema = re.sub(r"\bvarchar($|,)", r"TEXT\1", schema, flags=re.MULTILINE)
+        con.executescript(schema)
+        con.commit()
+        for table in Shell.get("mdb-tables", "-1", file).split("\n"):
+            if len(table.strip()) == 0:
+                continue
+            output = Shell.get("mdb-export", "-I", "sqlite", "-D", "%Y-%m-%d %H:%M", file, table)
+            output = output.strip()
+            if len(output) > 0:
+                con.executescript(output)
+                con.commit()
+
+        return con
+
+    def _connect_xls(self, file: str):
+        def __normalize_col(c: str):
+            return normalize_name(c, prefix='c')
+
+        def __read_data():
+            skiprows = 0
+            while True:
+                data = pd.read_excel(file, skiprows=skiprows)
+                for c in data.columns:
+                    if not re.match(r"^Unnamed: \d+$", c):
+                        data.columns = tuple(map(__normalize_col, data.columns))
+                        return data
+                skiprows = skiprows + 1
+
+        name = basename(file).rsplit(".", 1)[0]
+        name = normalize_name(name, prefix="t")
+        data = __read_data()
+
+        con = sqlite3.connect(MEMORY)
+
+        data.to_sql(name=name, index=False, con=con)
+
+        return con
+
+    def _connect_sql(self, file: str):
+        con = sqlite3.connect(MEMORY)
+        with open(file, "r") as f:
+            con.executescript(f.read())
+        return con
