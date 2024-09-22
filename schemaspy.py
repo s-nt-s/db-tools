@@ -28,7 +28,7 @@ if __name__ == "__main__":
     )
 
     s = SchemasPy(
-        home=dirname(abspath(__file__))+"/schemapy"
+        home=dirname(abspath(__file__))+"/schemaspy"
     )
     s.save_diagram(
         pargs.db,
