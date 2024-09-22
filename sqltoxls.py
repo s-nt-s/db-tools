@@ -9,6 +9,7 @@ from core.dblite import DBLite, dict_factory
 import logging
 import sys
 from typing import Dict, Any
+from os import getcwd
 
 
 def to_integer_if_possible(series: pd.Series):
@@ -55,7 +56,7 @@ if __name__ == "__main__":
         datefmt='%Y-%M-%d %H:%M:%S'
     )
 
-    FM = FileManager.get()
+    FM = FileManager(root=getcwd())
     with DBLite(pargs.db, readonly=True) as db:
         for path in sorted(map(str, Path(pargs.sql).rglob('*.sql'))):
             if path.split("/")[-1][0] == "_":
