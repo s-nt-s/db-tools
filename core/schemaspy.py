@@ -1,14 +1,9 @@
-#!/usr/bin/env python3
-
-from subprocess import DEVNULL, STDOUT, check_call
 from os.path import basename, realpath, isdir, isfile, dirname, relpath, join
 from os import makedirs, getcwd, chdir
 import tempfile
 from urllib.request import urlretrieve
 from textwrap import dedent
 from base64 import b64encode
-import argparse
-import sys
 import re
 from core.shell import Shell
 import logging
@@ -16,6 +11,12 @@ from PIL import Image
 from core.github import GitHub
 
 logger = logging.getLogger(__name__)
+
+
+def mychdir(d: str):
+    if d != getcwd():
+        chdir(d)
+        logger.info(f"$ cd {d}")
 
 
 def read(file: str, mode='r'):
@@ -68,18 +69,13 @@ class SchemasPy:
         out = realpath(out)
 
         if isProperties:
-            new_dir = dirname(relpath(file))
-            if current_dir != new_dir:
-                chdir(new_dir)
-                logger.info(f"$ cd {new_dir}")
+            mychdir(dirname(relpath(file)))
             cmd.extend([
                 "-configFile",
                 basename(file),
             ])
         else:
-            if self.root != new_dir:
-                chdir(self.root)
-                logger.info(f"$ cd {self.root}")
+            mychdir(self.root)
             name = basename(file).rsplit(".", 1)[0]
             cmd.extend([
                 "-dp",
