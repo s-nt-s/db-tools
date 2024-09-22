@@ -48,35 +48,44 @@ class SchemasPy:
         name = basename(url)
         file = self.root + name
         if isfile(file):
-            return name
+            return file
         logger.info("dwn "+file)
         urlretrieve(url, file)
-        return name
+        return file
 
     def report(self, file: str, out: str = None, imageformat: str = None):
         # https://github.com/schemaspy/schemaspy/issues/524#issuecomment-496010502
         if out is None:
             out = tempfile.mkdtemp()
 
+        current_dir = getcwd()
+        isProperties = file.endswith(".properties")
         self.__set_env(file)
         jar = self.__dwn_if_needed("schemaspy/schemaspy")
 
-        db = realpath(file)
-        cmd = ["java", "-jar", jar, "-o", out]
+        file = realpath(file)
+        cmd = ["java", "-jar", realpath(jar), "-o", out]
         out = realpath(out)
 
-        if file.endswith(".properties"):
+        if isProperties:
+            new_dir = dirname(relpath(file))
+            if current_dir != new_dir:
+                chdir(new_dir)
+                logger.info(f"$ cd {new_dir}")
             cmd.extend([
                 "-configFile",
-                relpath(file, self.root),
+                basename(file),
             ])
         else:
+            if self.root != new_dir:
+                chdir(self.root)
+                logger.info(f"$ cd {self.root}")
             name = basename(file).rsplit(".", 1)[0]
             cmd.extend([
                 "-dp",
                 self.root,
                 "-db",
-                db,
+                file,
                 "-cat",
                 name,
                 "-s",
@@ -87,14 +96,11 @@ class SchemasPy:
             if imageformat:
                 cmd.extend(["-imageformat", imageformat])
 
-        current_dir = getcwd()
-        chdir(self.root)
-        logger.info(f"$ cd {self.root}")
         Shell.run(*cmd)
-        if not file.endswith(".properties"):
-            Shell.run("bash", "rename.sh", dirname(db) + "/", out)
-        chdir(current_dir)
+        if not isProperties:
+            Shell.run("bash", self.root + "rename.sh", dirname(file) + "/", out)
         logger.info(out + "/index.html")
+        chdir(current_dir)
         return out
 
     def __set_env(self, file: str):
@@ -102,6 +108,8 @@ class SchemasPy:
             return
 
         driver = self.__dwn_if_needed("xerial/sqlite-jdbc")
+        if driver.startswith(self.root):
+            driver = driver[len(self.root):]
 
         write(self.root + "sqlite.properties", f'''
             driver=org.sqlite.JDBC
