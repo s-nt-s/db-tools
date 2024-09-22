@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 import argparse
-from os.path import isfile
+from os.path import isfile, abspath, dirname
 import sys
 import logging
 from core.schemaspy import SchemasPy
@@ -27,7 +27,9 @@ if __name__ == "__main__":
         datefmt='%Y-%M-%d %H:%M:%S'
     )
 
-    s = SchemasPy()
+    s = SchemasPy(
+        home=dirname(abspath(__file__))+"/schemapy"
+    )
     s.save_diagram(
         pargs.db,
         pargs.out,
