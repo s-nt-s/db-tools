@@ -64,7 +64,7 @@ class Shell:
         return None
 
     @staticmethod
-    def get(*args: str, **kargv) -> str:
+    def get(*args: str, **kwargs) -> str:
         logger.info("$ " + Shell.to_str(*args))
         with LogPipe(logging.ERROR) as logpipe:
             output = subprocess.check_output(args, stderr=logpipe)

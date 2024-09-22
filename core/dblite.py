@@ -91,15 +91,11 @@ class DBLite:
             self,
             file: str = MEMORY,
             extensions: Union[None, Tuple] = None,
-            reload: bool = False,
             readonly: bool = False,
             trim_str: bool = True,
             empty_is_null: bool = True,
             commit_every_x_changes: int = 1000
     ):
-        if reload and isfile(self.__file):
-            os.remove(self.__file)
-        self.__file = file
         self.__readonly = readonly
         self.__extensions = extensions or tuple()
         self.__inTransaction = False
@@ -107,49 +103,50 @@ class DBLite:
         self.__trim_str = trim_str
         self.__empty_is_null = empty_is_null
         self.__commit_every_x_changes = commit_every_x_changes
-        self._con: sqlite3.Connection = None
-        self._con = self.__get__connection()
+        self._con = self.__get__connection(file)
 
     @property
     def file(self):
-        if self._con is not None:
-            for name, file in self.select("PRAGMA database_list"):
-                if name == "main":
-                    return file
-        return self.__file
+        for name, file in self.select("PRAGMA database_list"):
+            if name == "main":
+                return file
 
-    def __get__connection(self):
+    def __get__connection(self, file: str):
         if self.__readonly:
-            if self.__file == MEMORY:
+            if file == MEMORY:
                 raise DBLiteException(
                     f"{MEMORY} and readonly={self.__readonly} doesn't make sense"
                 )
-            if not isfile(self.__file):
+            if not isfile(file):
                 raise FileNotFoundError(
                     errno.ENOENT,
                     os.strerror(errno.ENOENT),
-                    self.__file
+                    file
                 )
 
-        logger.info("sqlite: " + self.__file)
-        con = self._connect()
+        logger.info("sqlite: " + file)
+        con = self._connect(file)
         if self.__extensions:
             con.enable_load_extension(True)
             for e in self.__extensions:
                 con.load_extension(e)
         return con
 
-    def _connect(self):
+    def _connect(self, file: str):
         if self.__readonly:
-            file = "file:" + self.__file + "?mode=ro"
+            file = "file:" + file + "?mode=ro"
             return sqlite3.connect(file, uri=True)
-        return sqlite3.connect(self.__file)
+        return sqlite3.connect(file)
 
     def __enter__(self, *args, **kwargs):
         return self
 
     def __exit__(self, *args, **kwargs):
         self.close()
+
+    def empty(self):
+        with sqlite3.connect(MEMORY) as mpt:
+            mpt.backup(self._con)
 
     def openTransaction(self):
         if self.__inTransaction:
