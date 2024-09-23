@@ -14,7 +14,7 @@ if __name__ == "__main__":
     parser.add_argument('--size', default="large", help="Tamaño de la imagen")
     parser.add_argument('-i', help="Expresión regular que deben cumplir las tablas a incluir")
     parser.add_argument('-rows', action='store_true', help="Mostrar el número de registros")
-    parser.add_argument('db', help='Base de datos sqlite o .properties')
+    parser.add_argument('db', help='.properties oase de datos sqlite o .sql que genere un bd sqlite')
     pargs = parser.parse_args()
 
     if not isfile(pargs.db):

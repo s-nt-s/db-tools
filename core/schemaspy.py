@@ -10,6 +10,7 @@ import logging
 from PIL import Image
 from core.github import GitHub
 from core.filemanager import FileManager
+from core.dblite import DBLite
 from configparser import ConfigParser
 from os.path import expandvars
 from typing import Union
@@ -65,6 +66,7 @@ def find_arg_env(config: Union[ConfigParser, str]):
             if new_v != v:
                 yield k.split('.', 1)[-1], v, new_v
 
+
 class SchemasPy:
     EXT = ("png", "svg")
 
@@ -113,6 +115,13 @@ class SchemasPy:
                 expand = True
                 cmd.extend(['-'+k, v])
         else:
+            if file.endswith(".sql"):
+                new_db = f"{out}/db.sqlite"
+                with open(file, "r") as f:
+                    with DBLite(new_db) as db:
+                        db.empty()
+                        db.executescript(f.read())
+                file = new_db
             # https://github.com/schemaspy/schemaspy/issues/524#issuecomment-496010502
             cmd.extend([
                 "-configFile",
@@ -128,7 +137,7 @@ class SchemasPy:
             cmd.append("--norows")
 
         mychdir(self.root)
-        Shell.run(*cmd, expand=True)
+        Shell.run(*cmd, expand=expand)
         if not isProperties:
             Shell.run("bash", self.root + "rename.sh", dirname(file) + "/", out)
         html = out + "/index.html"
@@ -175,7 +184,6 @@ class SchemasPy:
             driver = driver[len(self.root):]
         config[section][field] = driver
         FM.dump(path, config)
-
 
     def save_diagram(self, db: str, img: str, size="compact", include: Union[str, None] = None, rows: bool = False):
         ext = img.rsplit(".")[-1].lower()
