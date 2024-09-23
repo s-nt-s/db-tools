@@ -4,6 +4,7 @@ import subprocess
 import sys
 import os
 from threading import Thread
+from os.path import expandvars
 
 logger = logging.getLogger(__name__)
 
@@ -46,10 +47,22 @@ class Shell:
                 a = "'" + a + "'"
             arr.append(a)
         return " ".join(arr)
+    
 
     @staticmethod
-    def run(*args: str, **kwargs) -> int:
+    def expandvars(*args):
+        arr = []
+        for a in args:
+            if isinstance(a, str):
+                a = expandvars(a)
+            arr.append(a)
+        return tuple(arr)
+
+    @staticmethod
+    def run(*args: str, expand=False, **kwargs) -> int:
         logger.info("$ " + Shell.to_str(*args))
+        if expand:
+            args = Shell.expandvars(*args)
         out = subprocess.call(args, **kwargs)
         if out != 0:
             logger.error("# exit code %s", out)
@@ -64,8 +77,10 @@ class Shell:
         return None
 
     @staticmethod
-    def get(*args: str, **kwargs) -> str:
+    def get(*args: str, expand=True, **kwargs) -> str:
         logger.info("$ " + Shell.to_str(*args))
+        if expand:
+            args = Shell.expandvars(*args)
         with LogPipe(logging.ERROR) as logpipe:
             output = subprocess.check_output(args, stderr=logpipe)
         text: str = output.decode(sys.stdout.encoding)

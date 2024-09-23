@@ -11,6 +11,8 @@ from PIL import Image
 from core.github import GitHub
 from core.filemanager import FileManager
 from configparser import ConfigParser
+from os.path import expandvars
+from typing import Union
 
 logger = logging.getLogger(__name__)
 FM = FileManager.get()
@@ -39,6 +41,17 @@ def find_config(config: ConfigParser, field):
             return s, field, v.strip()
     raise ValueError(f"{field} not found")
 
+
+def find_arg_env(config: Union[ConfigParser, str]):
+    if isinstance(config, str):
+        config = FM.load(config)
+    for s in config.sections():
+        for k, v in config.items(s):
+            if not k.startswith("schemaspy."):
+                continue
+            new_v = expandvars(v)
+            if new_v != v:
+                yield k.split('.', 1)[-1], v, new_v
 
 class SchemasPy:
     EXT = ("png", "svg")
@@ -77,6 +90,7 @@ class SchemasPy:
         file = realpath(file)
         cmd = ["java", "-jar", realpath(jar), "-o", out, "-dp", self.root]
         out = realpath(out)
+        expand = False
 
         if isProperties:
             mychdir(dirname(relpath(file)))
@@ -84,6 +98,9 @@ class SchemasPy:
                 "-configFile",
                 basename(file),
             ])
+            for k, v, new_v in find_arg_env(file):
+                expand = True
+                cmd.extend(['-'+k, v])
         else:
             # https://github.com/schemaspy/schemaspy/issues/524#issuecomment-496010502
             mychdir(self.root)
@@ -96,7 +113,7 @@ class SchemasPy:
         if imageformat:
             cmd.extend(["-imageformat", imageformat])
 
-        Shell.run(*cmd)
+        Shell.run(*cmd, expand=True)
         if not isProperties:
             Shell.run("bash", self.root + "rename.sh", dirname(file) + "/", out)
         html = out + "/index.html"
