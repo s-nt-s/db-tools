@@ -12,6 +12,8 @@ if __name__ == "__main__":
     parser.add_argument('--verbose', '-v', action='count', help="Nivel de depuración", default=0)
     parser.add_argument('--out', help="Diagrama de salida", required=True)
     parser.add_argument('--size', default="large", help="Tamaño de la imagen")
+    parser.add_argument('-i', help="Expresión regular que deben cumplir las tablas a incluir")
+    parser.add_argument('-rows', action='store_true', help="Mostrar el número de registros")
     parser.add_argument('db', help='Base de datos sqlite o .properties')
     pargs = parser.parse_args()
 
@@ -33,5 +35,7 @@ if __name__ == "__main__":
     s.save_diagram(
         pargs.db,
         pargs.out,
-        size=pargs.size
+        size=pargs.size,
+        include=pargs.i,
+        rows=pargs.rows
     )

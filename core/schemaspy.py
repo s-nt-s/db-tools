@@ -1,5 +1,5 @@
-from os.path import basename, realpath, isdir, isfile, dirname, relpath, join
-from os import makedirs, getcwd, chdir
+from os.path import basename, realpath, isdir, isfile, dirname, getmtime, join
+from os import makedirs, getcwd, chdir, remove
 import tempfile
 from urllib.request import urlretrieve
 from textwrap import dedent
@@ -13,12 +13,24 @@ from core.filemanager import FileManager
 from configparser import ConfigParser
 from os.path import expandvars
 from typing import Union
+from datetime import datetime
+from glob import glob
 
 logger = logging.getLogger(__name__)
 FM = FileManager.get()
 
 
+def days_from_updated(archivo):
+    if not isfile(archivo):
+        return 999999999999
+    mtime = datetime.fromtimestamp(getmtime(archivo))
+    now = datetime.now()
+    return (now - mtime).days
+
+
 def mychdir(d: str):
+    if len(d) == 0:
+        return
     if d != getcwd():
         chdir(d)
         logger.info(f"$ cd {d}")
@@ -78,14 +90,14 @@ class SchemasPy:
         urlretrieve(url, file)
         return file
 
-    def report(self, file: str, out: str = None, imageformat: str = None):
+    def report(self, file: str, out: str = None, imageformat: str = None, include: Union[str, None] = None, rows: bool = False):
         if out is None:
             out = tempfile.mkdtemp()
 
         current_dir = getcwd()
         isProperties = file.endswith(".properties")
         self.__set_env(file)
-        jar = self.__dwn_if_needed("schemaspy/schemaspy", ".jar")
+        jar = self.__get_schemaspy_jar()
 
         file = realpath(file)
         cmd = ["java", "-jar", realpath(jar), "-o", out, "-dp", self.root]
@@ -93,17 +105,15 @@ class SchemasPy:
         expand = False
 
         if isProperties:
-            mychdir(dirname(relpath(file)))
             cmd.extend([
                 "-configFile",
-                basename(file),
+                realpath(file),
             ])
             for k, v, new_v in find_arg_env(file):
                 expand = True
                 cmd.extend(['-'+k, v])
         else:
             # https://github.com/schemaspy/schemaspy/issues/524#issuecomment-496010502
-            mychdir(self.root)
             cmd.extend([
                 "-configFile",
                 "schemaspy-sqlite.properties",
@@ -112,7 +122,12 @@ class SchemasPy:
             ])
         if imageformat:
             cmd.extend(["-imageformat", imageformat])
+        if include:
+            cmd.extend(["-i", include])
+        if not rows:
+            cmd.append("--norows")
 
+        mychdir(self.root)
         Shell.run(*cmd, expand=True)
         if not isProperties:
             Shell.run("bash", self.root + "rename.sh", dirname(file) + "/", out)
@@ -121,6 +136,14 @@ class SchemasPy:
             logger.info(html)
         chdir(current_dir)
         return out
+
+    def __get_schemaspy_jar(self):
+        jars = list(glob(self.root + "schemaspy-*.jar"))
+        if len(jars) == 1 and days_from_updated(jars[0]) < 30:
+            return jars[0]
+        for j in jars:
+            remove(j)
+        return self.__dwn_if_needed("schemaspy/schemaspy", ".jar")
 
     def __set_env(self, file: str):
         if file.endswith(".properties"):
@@ -139,7 +162,9 @@ class SchemasPy:
         config: ConfigParser = FM.load(f"schemaspy/template/{name}.properties")
         if config is None:
             return
-
+        path = str(FM.resolve_path(f"schemaspy/{name}.properties"))
+        if days_from_updated(path) < 30:
+            return
         section, field, value = find_config(config, "driverPath")
 
         driver, sufix = value.split()
@@ -147,14 +172,14 @@ class SchemasPy:
         if driver.startswith(self.root):
             driver = driver[len(self.root):]
         config[section][field] = driver
-        FM.dump(f"schemaspy/{name}.properties", config)
+        FM.dump(path, config)
 
 
-    def save_diagram(self, db: str, img: str, size="compact"):
+    def save_diagram(self, db: str, img: str, size="compact", include: Union[str, None] = None, rows: bool = False):
         ext = img.rsplit(".")[-1].lower()
         if ext not in SchemasPy.EXT:
             raise ValueError("Image format output must be: "+", ".join(SchemasPy.EXT))
-        out = self.report(db, imageformat=ext)
+        out = self.report(db, imageformat=ext, include=include, rows=rows)
         fl = f"{out}/diagrams/summary/relationships.real.{size}.{ext}"
         if not isfile(fl):
             logger.warning(f"{fl} not found")
