@@ -141,9 +141,11 @@ class SchemasPy:
         jars = list(glob(self.root + "schemaspy-*.jar"))
         if len(jars) == 1 and days_from_updated(jars[0]) < 30:
             return jars[0]
+        jar = self.__dwn_if_needed("schemaspy/schemaspy", ".jar")
         for j in jars:
-            remove(j)
-        return self.__dwn_if_needed("schemaspy/schemaspy", ".jar")
+            if j != jar:
+                remove(j)
+        return jar
 
     def __set_env(self, file: str):
         if file.endswith(".properties"):
