@@ -9,8 +9,11 @@ from core.shell import Shell
 import logging
 from PIL import Image
 from core.github import GitHub
+from core.filemanager import FileManager
+from configparser import ConfigParser
 
 logger = logging.getLogger(__name__)
+FM = FileManager.get()
 
 
 def mychdir(d: str):
@@ -29,6 +32,14 @@ def write(file: str, txt: str):
         f.write(dedent(txt).strip())
 
 
+def find_config(config: ConfigParser, field):
+    for s in config.sections():
+        v = config[s].get(field)
+        if v is not None:
+            return s, field, v.strip()
+    raise ValueError(f"{field} not found")
+
+
 class SchemasPy:
     EXT = ("png", "svg")
 
@@ -44,8 +55,8 @@ class SchemasPy:
         self.root = realpath(self.home) + "/"
         makedirs(self.root, exist_ok=True)
 
-    def __dwn_if_needed(self, repo: str):
-        url = GitHub.get_asset(repo, "jar")
+    def __dwn_if_needed(self, repo: str, sufix):
+        url = GitHub.get_asset(repo, sufix)
         name = basename(url)
         file = self.root + name
         if isfile(file):
@@ -55,17 +66,16 @@ class SchemasPy:
         return file
 
     def report(self, file: str, out: str = None, imageformat: str = None):
-        # https://github.com/schemaspy/schemaspy/issues/524#issuecomment-496010502
         if out is None:
             out = tempfile.mkdtemp()
 
         current_dir = getcwd()
         isProperties = file.endswith(".properties")
         self.__set_env(file)
-        jar = self.__dwn_if_needed("schemaspy/schemaspy")
+        jar = self.__dwn_if_needed("schemaspy/schemaspy", ".jar")
 
         file = realpath(file)
-        cmd = ["java", "-jar", realpath(jar), "-o", out]
+        cmd = ["java", "-jar", realpath(jar), "-o", out, "-dp", self.root]
         out = realpath(out)
 
         if isProperties:
@@ -75,54 +85,53 @@ class SchemasPy:
                 basename(file),
             ])
         else:
+            # https://github.com/schemaspy/schemaspy/issues/524#issuecomment-496010502
             mychdir(self.root)
-            name = basename(file).rsplit(".", 1)[0]
             cmd.extend([
-                "-dp",
-                self.root,
+                "-configFile",
+                "schemaspy-sqlite.properties",
                 "-db",
                 file,
-                "-cat",
-                name,
-                "-s",
-                name,
-                "-u",
-                name
             ])
-            if imageformat:
-                cmd.extend(["-imageformat", imageformat])
+        if imageformat:
+            cmd.extend(["-imageformat", imageformat])
 
         Shell.run(*cmd)
         if not isProperties:
             Shell.run("bash", self.root + "rename.sh", dirname(file) + "/", out)
-        logger.info(out + "/index.html")
+        html = out + "/index.html"
+        if isfile(html):
+            logger.info(html)
         chdir(current_dir)
         return out
 
     def __set_env(self, file: str):
         if file.endswith(".properties"):
+            config: ConfigParser = FM.load(realpath(file))
+            _, _, value = find_config(config, "schemaspy.t")
+            self.__create_properties(value)
             return
-
-        driver = self.__dwn_if_needed("xerial/sqlite-jdbc")
-        if driver.startswith(self.root):
-            driver = driver[len(self.root):]
-
-        write(self.root + "sqlite.properties", f'''
-            driver=org.sqlite.JDBC
-            description=SQLite
-            driverPath={driver}
-            connectionSpec=jdbc:sqlite:<db>
-        ''')
+        self.__create_properties("sqlite")
 
         write(self.root + "schemaspy.properties", '''
             schemaspy.t=sqlite
             schemaspy.sso=true
         ''')
 
-        write(self.root + "rename.sh", '''
-            #!/bin/bash
-            grep "$1" -l -r $2 | xargs -d '\\n' sed -i -e "s|${1}||g"
-        ''')
+    def __create_properties(self, name: str):
+        config: ConfigParser = FM.load(f"schemaspy/template/{name}.properties")
+        if config is None:
+            return
+
+        section, field, value = find_config(config, "driverPath")
+
+        driver, sufix = value.split()
+        driver = self.__dwn_if_needed(driver, sufix)
+        if driver.startswith(self.root):
+            driver = driver[len(self.root):]
+        config[section][field] = driver
+        FM.dump(f"schemaspy/{name}.properties", config)
+
 
     def save_diagram(self, db: str, img: str, size="compact"):
         ext = img.rsplit(".")[-1].lower()

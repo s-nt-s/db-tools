@@ -17,10 +17,10 @@ class GitHub:
 
     @staticmethod
     @cache
-    def get_asset(repo: str, ext: str) -> str:
+    def get_asset(repo: str, sufix: str) -> str:
         url_api = f"https://api.github.com/repos/{repo}/releases/latest"
         data = GitHub.json(url_api)
         for asset in data['assets']:
-            if asset['name'].endswith("."+ext):
+            if asset['name'].endswith(sufix):
                 return asset['browser_download_url']
-        raise RuntimeError(f"{url_api} asset .{ext} not found")
+        raise RuntimeError(f"{url_api} asset *{sufix} not found")

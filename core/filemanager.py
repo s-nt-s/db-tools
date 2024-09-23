@@ -1,15 +1,15 @@
 import json
 import logging
 from os import W_OK, access, makedirs
-from os.path import dirname, realpath, exists
-from pathlib import Path, PurePosixPath
+from os.path import dirname, realpath
+from pathlib import Path
 from tempfile import gettempdir
 import pickle
 import csv as csvwriter
 from openpyxl import load_workbook
 from openpyxl.worksheet.worksheet import Worksheet
 from openpyxl.utils import get_column_letter
-from openpyxl.styles import PatternFill
+from configparser import ConfigParser, MissingSectionHeaderError
 
 import pandas as pd
 
@@ -182,6 +182,21 @@ class FileManager:
 
         dump_fl(file, obj, *args, **kvargs)
 
+    def load_properties(self, file, *args, **kvargs):
+        try:
+            config = ConfigParser()
+            config.optionxform = str
+            with open(file, "r") as f:
+                config.read_file(f)
+                return config
+        except MissingSectionHeaderError:
+            config = ConfigParser()
+            config.optionxform = str
+            with open(file, "r") as f:
+                content = '[default]\n' + f.read()
+                config.read_string(content)
+                return config
+
     def load_json(self, file, *args, **kvargs):
         with open(file, "r") as f:
             return json.load(f, *args, **kvargs)
@@ -193,6 +208,10 @@ class FileManager:
     def load_csv(self, file, *args, **kvargs):
         return pd.read_csv(file, *args, **kvargs)
 
+    def dump_properties(self, file, config: ConfigParser, *args, **kvargs):
+        with open(file, "w") as f:
+            config.write(f)
+        
     def dump_csv(self, file, obj, *args, **kvargs):
         if isinstance(obj, list):
             if len(obj) == 0:

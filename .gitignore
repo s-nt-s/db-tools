@@ -1,4 +1,6 @@
-schemaspy/
+schemaspy/*.properties
+schemaspy/*.jar
+!schemaspy/schemaspy-*.properties
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
