@@ -391,12 +391,12 @@ class DBLite:
             if multiple_limit == 1:
                 yield line
                 continue
-            table = m.group(1).strip('"')
+            table = m.group(1)
             if table != lsttb or count == 0:
                 if values:
                     yield val_to_str(values, ";")
                     values = []
-                yield f'INSERT INTO "{table}" VALUES'
+                yield f'INSERT INTO {table} VALUES'
                 count = multiple_limit
             values.append("("+m.group(2)+")")
             if len(values) > 1 and len(",".join(values)) > width_values:
