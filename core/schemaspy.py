@@ -92,7 +92,7 @@ class SchemasPy:
         urlretrieve(url, file)
         return file
 
-    def report(self, file: str, out: str = None, imageformat: str = None, include: Union[str, None] = None, rows: bool = False):
+    def report(self, file: str, out: str = None, imageformat: str = None, include: Union[str, None] = None, exclude: Union[str, None] = None, rows: bool = False):
         if out is None:
             out = tempfile.mkdtemp()
 
@@ -133,6 +133,8 @@ class SchemasPy:
             cmd.extend(["-imageformat", imageformat])
         if include:
             cmd.extend(["-i", include])
+        if exclude:
+            cmd.extend(["-I", exclude])
         if not rows:
             cmd.append("--norows")
 
@@ -185,11 +187,11 @@ class SchemasPy:
         config[section][field] = driver
         FM.dump(path, config)
 
-    def save_diagram(self, db: str, img: str, size="compact", include: Union[str, None] = None, rows: bool = False):
+    def save_diagram(self, db: str, img: str, size="compact", include: Union[str, None] = None, exclude: Union[str, None] = None, rows: bool = False):
         ext = img.rsplit(".")[-1].lower()
         if ext not in SchemasPy.EXT:
             raise ValueError("Image format output must be: "+", ".join(SchemasPy.EXT))
-        out = self.report(db, imageformat=ext, include=include, rows=rows)
+        out = self.report(db, imageformat=ext, include=include, exclude=exclude, rows=rows)
         fl = f"{out}/diagrams/summary/relationships.real.{size}.{ext}"
         if not isfile(fl):
             logger.warning(f"{fl} not found")
