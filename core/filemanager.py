@@ -10,6 +10,7 @@ from openpyxl import load_workbook
 from openpyxl.worksheet.worksheet import Worksheet
 from openpyxl.utils import get_column_letter
 from configparser import ConfigParser, MissingSectionHeaderError
+from openpyxl.worksheet.worksheet import Worksheet
 
 import pandas as pd
 
@@ -182,7 +183,7 @@ class FileManager:
 
         dump_fl(file, obj, *args, **kvargs)
 
-    def load_properties(self, file, *args, **kvargs):
+    def load_properties(self, file: Path, *args, **kvargs):
         try:
             config = ConfigParser()
             config.optionxform = str
@@ -197,22 +198,22 @@ class FileManager:
                 config.read_string(content)
                 return config
 
-    def load_json(self, file, *args, **kvargs):
+    def load_json(self, file: Path, *args, **kvargs):
         with open(file, "r") as f:
             return json.load(f, *args, **kvargs)
 
-    def dump_json(self, file, obj, *args, indent=2, **kvargs):
+    def dump_json(self, file: Path, obj, *args, indent=2, **kvargs):
         with open(file, "w") as f:
             json.dump(obj, f, *args, indent=indent, **kvargs)
 
-    def load_csv(self, file, *args, **kvargs):
+    def load_csv(self, file: Path, *args, **kvargs):
         return pd.read_csv(file, *args, **kvargs)
 
-    def dump_properties(self, file, config: ConfigParser, *args, **kvargs):
+    def dump_properties(self, file: Path, config: ConfigParser, *args, **kvargs):
         with open(file, "w") as f:
             config.write(f)
         
-    def dump_csv(self, file, obj, *args, **kvargs):
+    def dump_csv(self, file: Path, obj, *args, **kvargs):
         if isinstance(obj, list):
             if len(obj) == 0:
                 return
@@ -228,44 +229,54 @@ class FileManager:
             return
         obj.to_csv(file, *args, **kvargs)
 
-    def dump_xls(self, file, obj: pd.DataFrame, *args, prettify=False, **kvargs):
+    def dump_xls(self, file: Path, obj: pd.DataFrame, *args, prettify=False, **kvargs):
+        max_rows = 1048576 - 1
+        if len(obj) > max_rows:
+            name, ext = str(file).rsplit(".", 1)
+            for i in range(0, len(obj), max_rows):
+                fl = Path(f"{name}.{i+1:02d}.{ext}")
+                self.dump_xls(fl, obj.iloc[i:(i + max_rows)], *args, prettify=prettify, **kvargs)
+            return
+    
         obj.to_excel(file, *args, **kvargs)
         if prettify:
             WB = load_workbook(file)
-            WS: Worksheet = WB.active
-            for i, col in enumerate(obj.columns):
-                if kvargs.get('index') is not False:
-                    i = i + 1
-                cls = obj[col].dropna().drop_duplicates().values.tolist()
-                if len(cls) > 0:
-                    cls = list(map(lambda x: str(int(x)) if isinstance(x, (int, float)) else x, cls))
-                cls.append(col)
-                wdt = max(map(len, cls))
-                l = get_column_letter(i + 1)
-                w = max(wdt + 2, 6)
-                WS.column_dimensions[l].width = w
-            WS.auto_filter.ref = WS.dimensions
-            WS.freeze_panes = get_column_letter(WS.max_column+1) + str(2)
+            for ws in WB.worksheets:
+                if not(ws.max_row > 1 or ws.max_column > 1 or ws['A1'].value is not None):
+                    continue
+                for i, col in enumerate(obj.columns):
+                    if kvargs.get('index') is not False:
+                        i = i + 1
+                    cls = obj[col].dropna().drop_duplicates().values.tolist()
+                    if len(cls) > 0:
+                        cls = list(map(lambda x: str(int(x)) if isinstance(x, (int, float)) else x, cls))
+                    cls.append(col)
+                    wdt = max(map(len, cls))
+                    l = get_column_letter(i + 1)
+                    w = max(wdt + 2, 6)
+                    ws.column_dimensions[l].width = w
+                ws.auto_filter.ref = ws.dimensions
+                ws.freeze_panes = get_column_letter(ws.max_column+1) + str(2)
             WB.save(file)
 
-    def load_txt(self, file, *args, **kvargs):
+    def load_txt(self, file: Path, *args, **kvargs):
         with open(file, "r") as f:
             txt = f.read()
             if args or kvargs:
                 txt = txt.format(*args, **kvargs)
             return txt
 
-    def dump_txt(self, file, txt, *args, **kvargs):
+    def dump_txt(self, file: Path, txt, *args, **kvargs):
         if args or kvargs:
             txt = txt.format(*args, **kvargs)
         with open(file, "w") as f:
             f.write(txt)
 
-    def load_pickle(self, file, *args, **kvargs):
+    def load_pickle(self, file: Path, *args, **kvargs):
         with open(file, "rb") as f:
             return pickle.load(f)
 
-    def dump_pickle(self, file, obj, *args, **kvargs):
+    def dump_pickle(self, file: Path, obj, *args, **kvargs):
         with open(file, "wb") as f:
             pickle.dump(obj, f)
 

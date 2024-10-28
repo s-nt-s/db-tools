@@ -10,6 +10,7 @@ import logging
 import sys
 from typing import Dict, Any
 from os import getcwd
+import re
 
 
 def to_integer_if_possible(series: pd.Series):
@@ -73,6 +74,8 @@ if __name__ == "__main__":
             if not(pargs.ow) and isfile(name+".csv") and isfile(name+".xlsx"):
                 continue
             sql: str = FM.load(path)
+            sql = re.sub(r'/\*.*?\*/', '', sql, flags=re.DOTALL)
+            sql = re.sub(r'--.*?(\r?\n|$)', '', sql)
             sql = sql.strip().strip(";").split(";")
             if len(sql) > 1:
                 db.executescript((";\n".join(sql[:-1])+";"))
