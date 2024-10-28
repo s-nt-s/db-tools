@@ -49,6 +49,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser("Ejecuta varias select en una base de datos y guarda su resultado en excels")
     parser.add_argument('--verbose', '-v', action='count', help="Nivel de depuración", default=0)
     parser.add_argument('--sql', help="Directorio donde buscar las sql", required=True)
+    parser.add_argument('--prettify', action='store_true', help="Formatea los excel")
     parser.add_argument('--ow', action="store_true", help="Sobrescribir ficheros")
     parser.add_argument('db', help='Base de datos sqlite')
     pargs = parser.parse_args()
@@ -82,4 +83,4 @@ if __name__ == "__main__":
             df = read_sql(sql[-1], db)
             df = df.apply(to_integer_if_possible)
             FM.dump(name+".csv", df, index=False)
-            FM.dump(name+".xlsx", df, index=False, prettify=True)
+            FM.dump(name+".xlsx", df, index=False, prettify=pargs.prettify)
