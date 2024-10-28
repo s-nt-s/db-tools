@@ -37,6 +37,13 @@ def read_sql(sql: str, db: DBLite, size=100):
     return df
 
 
+def iter_sql_files(path: str):
+    p = Path(path)
+    if p.is_file():
+        yield path
+    else:
+        yield from sorted(map(str, p.rglob('*.sql')))
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser("Ejecuta varias select en una base de datos y guarda su resultado en excels")
     parser.add_argument('--verbose', '-v', action='count', help="Nivel de depuración", default=0)
@@ -58,7 +65,7 @@ if __name__ == "__main__":
 
     FM = FileManager(root=getcwd())
     with DBLite(pargs.db, readonly=True) as db:
-        for path in sorted(map(str, Path(pargs.sql).rglob('*.sql'))):
+        for path in iter_sql_files(pargs.sql):
             if path.split("/")[-1][0] == "_":
                 continue
             print(path)
