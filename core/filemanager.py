@@ -230,34 +230,38 @@ class FileManager:
         obj.to_csv(file, *args, **kvargs)
 
     def dump_xls(self, file: Path, obj: pd.DataFrame, *args, prettify=False, **kvargs):
-        max_rows = 1048576 - 1
+        max_rows = 200000 - 1
         if len(obj) > max_rows:
+            count = 0
             name, ext = str(file).rsplit(".", 1)
             for i in range(0, len(obj), max_rows):
-                fl = Path(f"{name}.{i+1:02d}.{ext}")
+                count = count + 1
+                fl = Path(f"{name}.{count:02d}.{ext}")
                 self.dump_xls(fl, obj.iloc[i:(i + max_rows)], *args, prettify=prettify, **kvargs)
             return
     
         obj.to_excel(file, *args, **kvargs)
-        if prettify:
-            WB = load_workbook(file)
-            for ws in WB.worksheets:
-                if not(ws.max_row > 1 or ws.max_column > 1 or ws['A1'].value is not None):
-                    continue
-                for i, col in enumerate(obj.columns):
-                    if kvargs.get('index') is not False:
-                        i = i + 1
-                    cls = obj[col].dropna().drop_duplicates().values.tolist()
-                    if len(cls) > 0:
-                        cls = list(map(lambda x: str(int(x)) if isinstance(x, (int, float)) else x, cls))
-                    cls.append(col)
-                    wdt = max(map(len, cls))
-                    l = get_column_letter(i + 1)
-                    w = max(wdt + 2, 6)
-                    ws.column_dimensions[l].width = w
-                ws.auto_filter.ref = ws.dimensions
-                ws.freeze_panes = get_column_letter(ws.max_column+1) + str(2)
-            WB.save(file)
+        if not prettify:
+            return
+
+        WB = load_workbook(file)
+        for ws in WB.worksheets:
+            if not(ws.max_row > 1 or ws.max_column > 1 or ws['A1'].value is not None):
+                continue
+            for i, col in enumerate(obj.columns):
+                if kvargs.get('index') is not False:
+                    i = i + 1
+                cls = obj[col].dropna().drop_duplicates().values.tolist()
+                if len(cls) > 0:
+                    cls = list(map(lambda x: str(int(x)) if isinstance(x, (int, float)) else x, cls))
+                cls.append(col)
+                wdt = max(map(len, cls))
+                l = get_column_letter(i + 1)
+                w = max(wdt + 2, 6)
+                ws.column_dimensions[l].width = w
+            ws.auto_filter.ref = ws.dimensions
+            ws.freeze_panes = get_column_letter(ws.max_column+1) + str(2)
+        WB.save(file)
 
     def load_txt(self, file: Path, *args, **kvargs):
         with open(file, "r") as f:
