@@ -432,10 +432,16 @@ class DBLite:
         raise ValueError(target)
 
     def register_function(self, name: str, num_params: int, func: Callable, is_aggregate=False):
+        def __func(*args, **kwargs):
+            try:
+                return func(*args, **kwargs)
+            except:
+                logger.error(func.__name__, exc_info=True)
+                raise
         if is_aggregate:
-            self._con.create_aggregate(name, num_params, mkAgregator(func))
+            self._con.create_aggregate(name, num_params, mkAgregator(__func))
         else:
-            self._con.create_function(name, num_params, func)
+            self._con.create_function(name, num_params, __func)
 
 
 class LazzyDBLite:
