@@ -8,6 +8,8 @@ from collections import defaultdict
 import hashlib
 from functools import cache
 import sqlite3
+from textwrap import dedent
+from math import ceil, floor
 sqlite3.enable_callback_tracebacks(True)
 
 if __name__ == "__main__":
@@ -48,41 +50,67 @@ if __name__ == "__main__":
     with DBLite(pargs.db, readonly=True) as db:
         for table in db.tables:
             for col in db.get_cols(table):
-                if is_to_anon(table, col):
-                    vls = db.to_tuple(f'select distinct "{col}" from "{table}" where "{col}" is not null order by "{col}"')
-                    if len(vls):
-                        if isinstance(vls[0], str):
-                            str_values = str_values.union(vls)
-                        else:
-                            num_values = num_values.union(vls)
-                    to_anon[table].append(col)
+                if not is_to_anon(table, col):
+                    continue
+                vls = db.to_tuple(f'select distinct "{col}" from "{table}" where "{col}" is not null')
+                if len(vls)==0:
+                    continue
+                if isinstance(vls[0], str):
+                    str_values = str_values.union(vls)
+                else:
+                    num_values = num_values.union(vls)
+                to_anon[table].append(col)
 
         if len(to_anon) == 0:
             sys.exit("No hay nada que anonimizar")
 
     SQL = []
     for table, cols in to_anon.items():
-        cls = ", ".join(map(lambda c: f'"{c}"=to_anon("{c}")', cols))
+        cls = ", ".join(map(lambda c: f'"{c}"=mk_anon("{c}")', cols))
         SQL.append(f'UPDATE "{table}" SET {cls};')
-
-    sql = "\n".join(SQL)
-    print(sql)
-
+    SQL = "\n".join(SQL)
 
     str_values = tuple(sorted(str_values))
-    num_values = tuple(sorted(num_values))
+    num_len = len(num_values)
+    int_values = set()
+    for i in num_values:
+        int_values.add(int(i))
+        int_values.add(int(ceil(i)))
+        int_values.add(int(floor(i)))
 
-    @cache
+    num_values_anom = {}
+    for i, n in enumerate(sorted(num_values)):
+        if i not in int_values:
+            int_values.add(i)
+            num_values_anom[n] = i
+            continue
+        while num_len in int_values:
+            num_len = num_len + 1
+        num_values_anom[n] = num_len
+        int_values.add(num_len)
+
     def mk_anon(v: Union[str, float, None]):
         if v is None:
             return None
         if isinstance(v, str):
             return hex(str_values.index(v))[2:]
-        return num_values.index(v)
+        return num_values_anom[v]
 
 
     with DBLite(out) as db:
-        db.register_function("to_anon", 1, mk_anon)
+        db.register_function("mk_anon", 1, mk_anon)
         with DBLite(pargs.db, readonly=True) as s:
             s.backup(db)
-        db.executescript(f"PRAGMA foreign_keys = false;\n{sql}\nPRAGMA foreign_keys = true;")
+        db.executescript(dedent(f'''
+            PRAGMA foreign_keys = OFF;
+            PRAGMA recursive_triggers = OFF;
+            PRAGMA synchronous = OFF;
+            PRAGMA journal_mode = OFF;
+        '''))
+        db.executescript(SQL)
+        db.executescript(dedent(f'''
+            PRAGMA foreign_keys = ON;
+            PRAGMA recursive_triggers = ON;
+            PRAGMA synchronous = FULL;
+            PRAGMA journal_mode = DELETE; -- o WAL
+        '''))
