@@ -218,7 +218,7 @@ class DBLite:
             vals.append(v)
 
         prm = ['?'] * len(vals)
-        sql = f"INSERT{insert_or} INTO {table} {tuple(keys)} VALUES {tuple(prm)}"
+        sql = f"INSERT{insert_or} INTO {table} ({', '.join(tuple(keys))}) VALUES ({', '.join(tuple(prm))})"
         self.run_modify_query(sql, *vals)
 
     def update(self, table: str, where: Union[None, Dict[str, Any]], **kwargs):
