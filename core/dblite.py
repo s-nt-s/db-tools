@@ -429,6 +429,7 @@ class DBLite:
         if isinstance(target, str) and target != MEMORY:
             with DBLite(target) as con:
                 self._con.backup(con._con)
+            return
         raise ValueError(target)
 
     def register_function(self, name: str, num_params: int, func: Callable, is_aggregate=False):
