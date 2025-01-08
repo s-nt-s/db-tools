@@ -41,12 +41,26 @@ class InfoDBLite(DBLite):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser("Describe una base de datos .sqlite")
+    parser.add_argument('--lite', action='store_true', help='Muestra una versión resumida')
     parser.add_argument('sqlite', nargs='+', help='Base de datos sqlite')
     pargs = parser.parse_args()
 
     for file in pargs.sqlite:
         if not isfile(file):
             sys.exit("No existe el fichero %s" % file)
+    
+    if pargs.lite:
+        for file in pargs.sqlite:
+            print("#", basename(file)+"\n")
+            with InfoDBLite(file) as db:
+                for table in sorted(db.tables):
+                    cols = db.get_cols(table)
+                    print("*", table)
+                    for col in cols:
+                        c = db.describe(table, col)
+                        print("    * {col} ({type})".format(**{k: str(v) for k, v in c.items()}))
+            print("\n")
+        sys.exit()
 
     print(dedent('''
         * `Tipo = int!`: el tipo de columna es `real` pero todos los valores son enteros
