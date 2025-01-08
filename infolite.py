@@ -64,9 +64,9 @@ if __name__ == "__main__":
 
     print(dedent('''
         * `Tipo = int!`: el tipo de columna es `real` pero todos los valores son enteros
-        * `Tipo = int?`: el tipo de columna es `text` pero todos los valores son códigos numericos
-        * `Vals`: número de valores diferentes no nulos ni vacios que contiene el campo
-        * `Nulos`: número de filas con valor null o vacio en esa columna
+        * `Tipo = int?`: el tipo de columna es `text` pero todos los valores son códigos numéricos
+        * `Vals`: número de valores diferentes no nulos ni vacíos que contiene el campo
+        * `Nulos`: número de filas con valor null o vació en esa columna
     '''))
     line_fmt = "| {col:<14} | {type:<4} | {min:>9} | {max:>9} | {vals:>6} | {nulls:>5} |"
 
