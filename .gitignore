@@ -1,3 +1,4 @@
+data/
 schemaspy/*.properties
 schemaspy/*.jar
 !schemaspy/schemaspy-*.properties
