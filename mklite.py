@@ -16,6 +16,8 @@ HOME = os.environ.get('HOME')
 MDB = ("mdb", "accdb")
 XLS = ("xls", "xlsx")
 SQL = ("sql", "sqlite")
+CSV = ("csv", )
+ZIP = ("zip", )
 
 
 def rel_home(path: str):
@@ -67,9 +69,8 @@ class SourceLite(MEMLite):
         )
 
 
-
 if __name__ == "__main__":
-    EXT = MDB + XLS + SQL
+    EXT = MDB + XLS + CSV + SQL + ZIP
     parser = argparse.ArgumentParser(
         "Convierte {} a SQLite".format(", ".join(EXT)),
         formatter_class=argparse.RawTextHelpFormatter

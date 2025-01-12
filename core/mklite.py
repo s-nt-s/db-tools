@@ -1,4 +1,5 @@
-from os.path import basename
+from os.path import basename, join
+from os import walk
 import sqlite3
 import pandas as pd
 from unidecode import unidecode
@@ -8,6 +9,8 @@ import logging
 from core.dblite import DBLite
 from core.dblite import MEMORY
 from core.shell import Shell
+import zipfile
+import tempfile
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +38,15 @@ def can_be_int(s):
     if s.isdigit():
         return True
     return False
+
+
+def iter_zip(file: str):
+    with tempfile.TemporaryDirectory() as temp_dir:
+        with zipfile.ZipFile(file, 'r') as zip_ref:
+            zip_ref.extractall(temp_dir)
+            for root, subdirs, files in walk(temp_dir):
+                for file in files:
+                    yield join(root, file)
 
 
 class NormLite(DBLite):
@@ -194,6 +206,37 @@ class MEMLite(DBLite):
 
         data.to_sql(name=name, index=False, con=con)
 
+        return con
+
+    def _connect_csv(self, file: str):
+        def __normalize_col(c: str):
+            return normalize_name(c, prefix='c')
+
+        def __read_data():
+            skiprows = 0
+            while True:
+                data = pd.read_csv(file, skiprows=skiprows)
+                for c in data.columns:
+                    if not re.match(r"^Unnamed: \d+$", c):
+                        data.columns = tuple(map(__normalize_col, data.columns))
+                        return data
+                skiprows = skiprows + 1
+
+        name = basename(file).rsplit(".", 1)[0]
+        name = normalize_name(name, prefix="t")
+        data = __read_data()
+
+        con = sqlite3.connect(MEMORY)
+
+        data.to_sql(name=name, index=False, con=con)
+
+        return con
+
+    def _connect_zip(self, file: str):
+        con = sqlite3.connect(MEMORY)
+        for f in iter_zip(file):
+            with MEMLite(f) as db:
+                db.backup(con)
         return con
 
     def _connect_sql(self, file: str):
