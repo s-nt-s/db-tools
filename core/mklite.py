@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 def normalize_name(s: str, prefix: str):
     s = unidecode(s)
     s = s.strip()
-    s = re.sub(r"[\s_\-\.]+", "_", s)
+    s = re.sub(r"[\s_\-\.\(\)]+", "_", s)
     s = s.strip("_ ")
     s = s.lower()
     if not s[0].isalpha():
