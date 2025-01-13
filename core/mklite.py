@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 def normalize_name(s: str, prefix: str):
     s = unidecode(s)
     s = s.strip()
-    s = re.sub(r"[\s_\-\.\(\)]+", "_", s)
+    s = re.sub(r"[\s_\-\.\(\)\/]+", "_", s)
     s = s.strip("_ ")
     s = s.lower()
     if not s[0].isalpha():
@@ -189,14 +189,16 @@ class MEMLite(DBLite):
             return normalize_name(c, prefix='c')
 
         def __read_data():
-            skiprows = 0
-            while True:
-                data = pd.read_excel(file, skiprows=skiprows)
-                for c in data.columns:
-                    if not re.match(r"^Unnamed: \d+$", c):
-                        data.columns = tuple(map(__normalize_col, data.columns))
-                        return data
+            data = None
+            hasUnnamed = True
+            skiprows = -1
+            while hasUnnamed:
                 skiprows = skiprows + 1
+                data = pd.read_excel(file, skiprows=skiprows)
+                hasUnnamed = any(re.match(r"^Unnamed: \d+$", c) for c in data.columns if isinstance(c, str))
+            if data is not None:
+                data.columns = tuple(map(__normalize_col, data.columns))
+                return data
 
         name = basename(file).rsplit(".", 1)[0]
         name = normalize_name(name, prefix="t")
