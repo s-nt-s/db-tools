@@ -12,13 +12,15 @@ from core.shell import Shell
 import zipfile
 import tempfile
 
+from typing import Union, Dict
+
 logger = logging.getLogger(__name__)
 
 
 def normalize_name(s: str, prefix: str):
     s = unidecode(s)
     s = s.strip()
-    s = re.sub(r"[\s_\-\.\(\)\/]+", "_", s)
+    s = re.sub(r"[\s_\-\.\(\)\/;,]+", "_", s)
     s = s.strip("_ ")
     s = s.lower()
     if not s[0].isalpha():
@@ -185,29 +187,38 @@ class MEMLite(DBLite):
         return con
 
     def _connect_xls(self, file: str):
+        name = basename(file).rsplit(".", 1)[0]
+
         def __normalize_col(c: str):
+            if not isinstance(c, str):
+                c = str(c)
             return normalize_name(c, prefix='c')
 
         def __read_data():
+            obj: Dict[str, pd.DataFrame] = {}
+            sheets = list(pd.ExcelFile(file).sheet_names)
+            for sheet in sheets:
+                k = name if len(sheet) == 1 else (name+'_'+sheet)
+                obj[k] = __read_sheet(sheet)
+            return obj
+            
+        def __read_sheet(sheet: Union[str, int]):
             data = None
             hasUnnamed = True
             skiprows = -1
             while hasUnnamed:
                 skiprows = skiprows + 1
-                data = pd.read_excel(file, skiprows=skiprows)
+                data = pd.read_excel(file, sheet_name=sheet, skiprows=skiprows)
                 hasUnnamed = any(re.match(r"^Unnamed: \d+$", c) for c in data.columns if isinstance(c, str))
             if data is not None:
                 data.columns = tuple(map(__normalize_col, data.columns))
                 return data
 
-        name = basename(file).rsplit(".", 1)[0]
-        name = normalize_name(name, prefix="t")
-        data = __read_data()
-
         con = sqlite3.connect(MEMORY)
-
-        data.to_sql(name=name, index=False, con=con)
-
+        data = __read_data()
+        for k, df in data.items():
+            name = normalize_name(k, prefix="t")
+            df.to_sql(name=name, index=False, con=con)
         return con
 
     def _connect_csv(self, file: str):
