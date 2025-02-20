@@ -206,10 +206,11 @@ class MEMLite(DBLite):
             data = None
             hasUnnamed = True
             skiprows = -1
+            isKO = re.compile(r"^Unnamed: \d+$").match
             while hasUnnamed:
                 skiprows = skiprows + 1
                 data = pd.read_excel(file, sheet_name=sheet, skiprows=skiprows)
-                hasUnnamed = any(re.match(r"^Unnamed: \d+$", c) for c in data.columns if isinstance(c, str))
+                hasUnnamed = any(map(isKO, map(str, data.columns)))
             if data is not None:
                 data.columns = tuple(map(__normalize_col, data.columns))
                 return data
