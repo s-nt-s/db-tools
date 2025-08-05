@@ -88,6 +88,7 @@ if __name__ == "__main__":
             precedido por !!, excluir todo menos las tabla indicada
             acabando en _, un prefijo para las tablas
             empezando por  _, un sufijo para las tablas
+            empezando por '=' el nombre que se le dará a la tabla
 
             El operador ! y !! se aplica a la base de datos más proxima.
             No se puede usar ambos operadores (! y !!) en una misma base de datos
